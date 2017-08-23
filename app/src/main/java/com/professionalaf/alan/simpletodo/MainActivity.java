@@ -5,21 +5,18 @@ import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
 import android.view.View;
 import android.widget.AdapterView;
-import android.widget.ArrayAdapter;
 import android.widget.EditText;
 import android.widget.ListView;
 
-import org.apache.commons.io.FileUtils;
+import com.raizlabs.android.dbflow.sql.language.SQLite;
 
-import java.io.File;
-import java.io.IOException;
 import java.util.ArrayList;
 
 
 public class MainActivity extends AppCompatActivity {
 
-    ArrayList<String> items;
-    ArrayAdapter<String> itemsAdapter;
+    //ArrayList<TodoItem> items;
+    TodoItemAdapter itemsAdapter;
     ListView lvItems;
 
     @Override
@@ -28,8 +25,8 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         lvItems = (ListView)findViewById(R.id.lvlItems);
-        readItems();
-        itemsAdapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, items);
+        ArrayList<TodoItem> items = new ArrayList<>(SQLite.select().from(TodoItem.class).queryList());
+        itemsAdapter = new TodoItemAdapter(this, items);
         lvItems.setAdapter(itemsAdapter);
 
         setupListViewListeners();
@@ -38,21 +35,22 @@ public class MainActivity extends AppCompatActivity {
     public void onAddItem(View v) {
         EditText etNewItem = (EditText) findViewById(R.id.etNewItem);
         String itemText = etNewItem.getText().toString();
-        itemsAdapter.add(itemText);
+
+        TodoItem item = new TodoItem();
+        item.setDescription(itemText);
+        itemsAdapter.add(item);
+        item.save();
+
         etNewItem.setText("");
-        writeItems();
     }
-
-
 
     private void setupListViewListeners() {
         lvItems.setOnItemLongClickListener(
                 new AdapterView.OnItemLongClickListener() {
                     @Override
                     public boolean onItemLongClick(AdapterView<?> adapter, View item, int pos, long id) {
-                        items.remove(pos);
-                        itemsAdapter.notifyDataSetChanged();
-                        writeItems();
+                        itemsAdapter.deleteItem(pos);
+
                         return true;
                     }
                 }
@@ -63,7 +61,7 @@ public class MainActivity extends AppCompatActivity {
                     @Override
                     public void onItemClick(AdapterView<?> adapter, View item, int pos, long id) {
                         Intent i = new Intent(MainActivity.this, EditItemActivity.class);
-                        i.putExtra(EditItemActivity.ItemTextKey, items.get(pos));
+                        i.putExtra(EditItemActivity.ItemTextKey, itemsAdapter.getItem(pos).description);
                         i.putExtra(EditItemActivity.ItemPositionKey, pos);
 
                         startActivityForResult(i, EditItemActivity.EditItemSuccessCode);
@@ -72,36 +70,13 @@ public class MainActivity extends AppCompatActivity {
         );
     }
 
-    private void readItems() {
-        File filesDir = getFilesDir();
-        File todoFile = new File(filesDir, "todo.txt");
-        try {
-            items = new ArrayList<String>(FileUtils.readLines(todoFile));
-        } catch (IOException e) {
-            items = new ArrayList<>();
-        }
-    }
-
-    private void writeItems() {
-        File filesDir = getFilesDir();
-        File todoFile = new File(filesDir, "todo.txt");
-        try {
-            FileUtils.writeLines(todoFile, items);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         if (requestCode == EditItemActivity.EditItemSuccessCode) {
             int position = data.getIntExtra(EditItemActivity.ItemPositionKey, -1);
             if (position >= 0) {
-                String updatedItem = data.getStringExtra(EditItemActivity.ItemTextKey);
-                items.set(position, updatedItem);
-
-                itemsAdapter.notifyDataSetChanged();
-                writeItems();
+                String updatedDescription = data.getStringExtra(EditItemActivity.ItemTextKey);
+                itemsAdapter.editItemDescription(position, updatedDescription);
             }
         }
     }
